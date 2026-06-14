@@ -58,6 +58,11 @@ def sse(payload: dict) -> str:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+@app.get("/")
+async def health():
+    return {"status": "ok"}
+
+
 @app.get("/api/status")
 async def get_status():
     return state
