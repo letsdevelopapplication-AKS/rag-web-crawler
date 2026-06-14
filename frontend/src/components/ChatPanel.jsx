@@ -11,16 +11,30 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [showPrompt, setShowPrompt] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [ttsEnabled, setTtsEnabled] = useState(true)
+  const [language, setLanguage] = useState('en')
   const bottomRef = useRef()
   const inputRef = useRef()
+  const recognitionRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = async (e) => {
-    e.preventDefault()
-    const question = input.trim()
+  const speak = (text) => {
+    if (!ttsEnabled || !window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const utt = new SpeechSynthesisUtterance(text.replace(/<[^>]+>/g, ''))
+    utt.lang = language === 'hi' ? 'hi-IN' : 'en-US'
+    utt.rate = 1
+    utt.pitch = 1
+    window.speechSynthesis.speak(utt)
+  }
+
+  const sendMessage = async (e, overrideQuestion) => {
+    if (e) e.preventDefault()
+    const question = (overrideQuestion !== undefined ? overrideQuestion : input).trim()
     if (!question || loading) return
 
     setInput('')
@@ -53,6 +67,8 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
               next[next.length - 1] = { role: 'assistant', content: accumulated }
               return next
             })
+          } else if (data.type === 'done') {
+            speak(accumulated)
           }
         }
       }
@@ -66,6 +82,42 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
       setLoading(false)
       inputRef.current?.focus()
     }
+  }
+
+  const startRecording = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Speech recognition is not supported in this browser. Please use Chrome or Edge.')
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = language === 'hi' ? 'hi-IN' : 'en-US'
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onstart = () => setIsRecording(true)
+
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript
+      setInput(transcript)
+      inputRef.current?.focus()
+    }
+
+    recognition.onerror = (e) => {
+      if (e.error !== 'aborted') alert(`Speech recognition error: ${e.error}`)
+      setIsRecording(false)
+    }
+
+    recognition.onend = () => setIsRecording(false)
+
+    recognition.start()
+    recognitionRef.current = recognition
+  }
+
+  const stopRecording = () => {
+    recognitionRef.current?.stop()
+    setIsRecording(false)
   }
 
   const renderContent = (text) =>
@@ -108,6 +160,35 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
         )}
 
         <div className="sidebar-card">
+          <div className="sidebar-label">Audio</div>
+          <div className="sidebar-row">
+            <span className="sidebar-key">Language</span>
+            <div className="lang-picker">
+              <button
+                className={`lang-btn ${language === 'en' ? 'lang-active' : ''}`}
+                onClick={() => setLanguage('en')}
+              >EN</button>
+              <button
+                className={`lang-btn ${language === 'hi' ? 'lang-active' : ''}`}
+                onClick={() => setLanguage('hi')}
+              >हिं</button>
+            </div>
+          </div>
+          <div className="sidebar-row">
+            <span className="sidebar-key">Voice reply</span>
+            <button
+              className={`tts-toggle ${ttsEnabled ? 'tts-on' : 'tts-off'}`}
+              onClick={() => {
+                if (ttsEnabled) window.speechSynthesis?.cancel()
+                setTtsEnabled((v) => !v)
+              }}
+            >
+              {ttsEnabled ? '🔊 On' : '🔇 Off'}
+            </button>
+          </div>
+        </div>
+
+        <div className="sidebar-card">
           <button className="prompt-toggle" onClick={() => setShowPrompt((v) => !v)}>
             <span>System Prompt</span>
             <span className="toggle-arrow">{showPrompt ? '▲' : '▼'}</span>
@@ -134,17 +215,31 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
         </div>
 
         <form className="chat-form" onSubmit={sendMessage}>
+          <button
+            type="button"
+            className={`btn-mic ${isRecording ? 'btn-mic-recording' : ''}`}
+            onClick={isRecording ? stopRecording : startRecording}
+            disabled={loading}
+            title={isRecording ? 'Stop recording' : 'Ask by voice'}
+          >
+            {isRecording ? '⏹' : '🎙'}
+          </button>
           <input
             ref={inputRef}
             type="text"
             className="chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about the website…"
-            disabled={loading}
+            placeholder={
+              isRecording
+                ? (language === 'hi' ? 'सुन रहा है… ⏹ दबाएं' : 'Listening… click ⏹ to stop')
+                : language === 'hi' ? 'प्रश्न पूछें या माइक उपयोग करें…'
+                : 'Ask a question or use the mic…'
+            }
+            disabled={loading || isRecording}
             autoFocus
           />
-          <button className="btn-send" type="submit" disabled={loading || !input.trim()}>
+          <button className="btn-send" type="submit" disabled={loading || !input.trim() || isRecording}>
             {loading ? '…' : '➤'}
           </button>
         </form>
