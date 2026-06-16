@@ -1,27 +1,30 @@
 import chromadb
-import os
 
 
 class VectorStore:
+    """One persistent Chroma client shared across all tenants; each method
+    takes a `collection_name` so every account gets an isolated collection
+    (`kb_<account_id>`) within the same persist directory."""
+
     def __init__(self, persist_dir: str = "./chroma_db"):
         self.persist_dir = persist_dir
         self.client = chromadb.PersistentClient(path=persist_dir)
-        self.collection_name = "knowledge_base"
 
-    def get_or_create_collection(self):
+    def get_or_create_collection(self, collection_name: str):
         return self.client.get_or_create_collection(
-            name=self.collection_name,
+            name=collection_name,
             metadata={"hnsw:space": "cosine"},
         )
 
     def add_documents(
         self,
+        collection_name: str,
         texts: list[str],
         embeddings: list[list[float]],
         metadatas: list[dict],
         ids: list[str],
     ):
-        collection = self.get_or_create_collection()
+        collection = self.get_or_create_collection(collection_name)
         collection.add(
             documents=texts,
             embeddings=embeddings,
@@ -29,8 +32,8 @@ class VectorStore:
             ids=ids,
         )
 
-    def query(self, query_embedding: list[float], n_results: int = 5) -> dict:
-        collection = self.get_or_create_collection()
+    def query(self, collection_name: str, query_embedding: list[float], n_results: int = 5) -> dict:
+        collection = self.get_or_create_collection(collection_name)
         count = collection.count()
         n_results = min(n_results, count) if count > 0 else 1
         results = collection.query(
@@ -40,14 +43,14 @@ class VectorStore:
         )
         return results
 
-    def count(self) -> int:
+    def count(self, collection_name: str) -> int:
         try:
-            return self.get_or_create_collection().count()
+            return self.get_or_create_collection(collection_name).count()
         except Exception:
             return 0
 
-    def reset(self):
+    def reset(self, collection_name: str):
         try:
-            self.client.delete_collection(self.collection_name)
+            self.client.delete_collection(collection_name)
         except Exception:
             pass

@@ -1,7 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { API_BASE } from '../config'
 
-export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contactInfo = { emails: [], phones: [] } }) {
+export default function ChatPanel({
+  apiKey,
+  systemPrompt,
+  websiteUrl,
+  chunkCount,
+  contactInfo = { emails: [], phones: [] },
+  compact = false,
+}) {
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -45,7 +52,7 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
     try {
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
         body: JSON.stringify({ question }),
       })
 
@@ -125,7 +132,8 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
 
   return (
     <div className="chat-layout">
-      {/* Sidebar */}
+      {/* Sidebar — hidden in compact mode (e.g. the narrow embeddable widget) */}
+      {!compact && (
       <aside className="chat-sidebar">
         <div className="sidebar-card">
           <div className="sidebar-label">Knowledge Base</div>
@@ -198,6 +206,7 @@ export default function ChatPanel({ systemPrompt, websiteUrl, chunkCount, contac
           )}
         </div>
       </aside>
+      )}
 
       {/* Chat area */}
       <div className="chat-area">
